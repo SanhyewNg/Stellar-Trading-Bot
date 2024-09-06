@@ -1,6 +1,11 @@
+import yaml
 import pandas as pd
-from stellar_sdk import Server, Asset
 from datetime import datetime
+from stellar_sdk import Server, Asset
+
+# Load configuration
+with open("config/config.yaml", "r") as file:
+    config = yaml.safe_load(file)
 
 def fetch_price_data(pair, interval="1h", limit=100):
     """
@@ -9,15 +14,8 @@ def fetch_price_data(pair, interval="1h", limit=100):
     server = Server("https://horizon.stellar.org")
 
     base_asset_code, counter_asset_code = pair.split('/')
-    if base_asset_code == "XLM":
-        base_asset = Asset.native()
-    else:
-        base_asset = Asset(base_asset_code, "ISSUER_ADDRESS")  # Replace with actual issuer
-
-    if counter_asset_code == "USD":
-        counter_asset = Asset(counter_asset_code, "GAOHRNEIAIWX42ONJ5R25X3C4R45GGPWPSHODW4ZWNMUJYFXVATF7PWL")  # Example issuer
-    else:
-        counter_asset = Asset(counter_asset_code, "ISSUER_ADDRESS")  # Replace with actual issuer
+    base_asset = Asset.native() if base_asset_code == "XLM" else Asset(base_asset_code, config['asset_issuers'].get(base_asset_code))
+    counter_asset = Asset.native() if counter_asset_code == "XLM" else Asset(counter_asset_code, config['asset_issuers'].get(counter_asset_code))
 
     trades = server.trades().for_asset_pair(base=base_asset, counter=counter_asset).limit(limit).order(desc=True).call()
 
@@ -46,7 +44,7 @@ def fetch_trading_history(trading_bot):
     try:
         # Fetch all transactions for the account
         transactions = server.transactions().for_account(account_id).limit(200).order(desc=True).call()
-        
+
         # Extract relevant data from transactions
         trades = []
         for transaction in transactions['_embedded']['records']:
@@ -63,11 +61,7 @@ def fetch_trading_history(trading_bot):
         # Convert list of trades into a DataFrame
         trades_df = pd.DataFrame(trades)
         return trades_df
-    
+
     except Exception as e:
         print(f"Error fetching trading history: {e}")
         return pd.DataFrame(columns=["Date", "Action", "Amount", "Price"])
-    
-# Example usage:
-# trading_bot = TradingBot(stellar_key)
-# trading_history = fetch_trading_history(trading_bot)

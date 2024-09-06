@@ -9,6 +9,9 @@ import plotly.graph_objects as go
 # Set page configuration
 st.set_page_config(page_title="Stellar Trading Bot", layout="wide")
 
+# Display the logo at the top of the sidebar
+st.sidebar.image("assets/logo.jpg", use_column_width=True)
+
 # Sidebar for Stellar Key
 st.sidebar.title("Stellar Trading Bot")
 stellar_key = st.sidebar.text_input("Enter Your Stellar Key", type="password")
@@ -34,58 +37,69 @@ def display_empty_trading_history():
     empty_df = pd.DataFrame(columns=["Date", "Action", "Amount", "Price"])
     st.table(empty_df)
 
+network_choice = st.sidebar.selectbox("Select Network", ["Testnet", "Mainnet"])
+
 # Initialize TradingBot if key is provided
 if stellar_key:
-    bot = TradingBot(stellar_key)
+    bot = TradingBot(stellar_key, network="testnet" if network_choice == "Testnet" else "mainnet")
+    
+    with st.spinner("Fetching price data..."):
+        # Fetch price data
+        price_data = fetch_price_data(crypto_pair)
 
-    # Fetch price data
-    price_data = fetch_price_data(crypto_pair)
+    if not price_data.empty:
+        # Create columns for chart and trading history
+        col1, col2 = st.columns([2, 1])  # Adjust the width ratio as needed
 
-    # Create columns for chart and trading history
-    col1, col2 = st.columns([2, 1])  # Adjust the width ratio as needed
+        with col1:
+            # Display the selected chart
+            st.title(f"{crypto_pair} Price Chart")
+            if chart_type == "Line Chart":
+                st.line_chart(price_data.set_index("timestamp")["close"])
+            elif chart_type == "Candlestick Chart":
+                # Implement candlestick chart using Plotly
+                fig = go.Figure(data=[go.Candlestick(
+                    x=price_data['timestamp'],
+                    open=price_data['open'],
+                    high=price_data['high'],
+                    low=price_data['low'],
+                    close=price_data['close']
+                )])
+                fig.update_layout(title=f"{crypto_pair} Candlestick Chart", xaxis_title="Date", yaxis_title="Price")
+                st.plotly_chart(fig)
 
-    with col1:
-        # Display the selected chart
-        st.title(f"{crypto_pair} Price Chart")
-        if chart_type == "Line Chart":
-            st.line_chart(price_data.set_index("timestamp")["close"])
-        elif chart_type == "Candlestick Chart":
-            # Implement candlestick chart using Plotly
-            fig = go.Figure(data=[go.Candlestick(
-                x=price_data['timestamp'],
-                open=price_data['open'],
-                high=price_data['high'],
-                low=price_data['low'],
-                close=price_data['close']
-            )])
-            fig.update_layout(title=f"{crypto_pair} Candlestick Chart", xaxis_title="Date", yaxis_title="Price")
-            st.plotly_chart(fig)
+        with col2:
+            with st.spinner("Fetching trading history..."):
+                # Fetch trading history
+                trading_history = fetch_trading_history(bot)
 
-    with col2:
-        # Fetch trading history
-        trading_history = fetch_trading_history(bot)
+            # Display trading history as table
+            st.subheader("Trading History")
+            if not trading_history.empty:
+                st.table(trading_history)
+            else:
+                st.write("No trading history available for this account.")
 
-        # Display trading history as table
-        st.subheader("Trading History")
-        st.table(trading_history)
+        # Overlay trading history on chart
+        st.subheader("Price Chart with Trading History")
+        fig, ax = plt.subplots(figsize=(10, 5))
+        ax.plot(price_data['timestamp'], price_data['close'], label='Price')
 
-    # Overlay trading history on chart
-    st.subheader("Price Chart with Trading History")
-    fig, ax = plt.subplots(figsize=(10, 5))
-    ax.plot(price_data['timestamp'], price_data['close'], label='Price')
+        # Add buy/sell markers
+        for index, trade in trading_history.iterrows():
+            trade_date = datetime.strptime(trade['Date'], "%Y-%m-%dT%H:%M:%SZ")
+            color = 'green' if trade['Action'] == 'Buy' else 'red'
+            ax.axvline(trade_date, color=color, linestyle='--', alpha=0.7)
+            ax.text(trade_date, trade['Price'], f"{trade['Action']} {trade['Amount']}", rotation=90, verticalalignment='bottom', color=color)
 
-    # # Add buy/sell markers
-    # for index, trade in trading_history.iterrows():
-    #     trade_date = datetime.strptime(trade['Date'], "%Y-%m-%d")
-    #     color = 'green' if trade['Action'] == 'Buy' else 'red'
-    #     ax.axvline(trade_date, color=color, linestyle='--', alpha=0.7)
-    #     ax.text(trade_date, trade['Price'], f"{trade['Action']} {trade['Amount']}", rotation=90, verticalalignment='bottom', color=color)
+        ax.set_title(f"{crypto_pair} Price with Trading History")
+        ax.set_xlabel("Date")
+        ax.set_ylabel("Price")
+        ax.legend()
+        st.pyplot(fig)
 
-    # ax.set_title(f"{crypto_pair} Price with Trading History")
-    # ax.set_xlabel("Date")
-    # ax.set_ylabel("Price")
-    # ax.legend()
-    # st.pyplot(fig)
+    else:
+        st.write("No price data available for the selected trading pair.")
 
 else:
     # Display placeholder charts and trading history
@@ -104,7 +118,3 @@ else:
         # Placeholder for trading history table
         st.subheader("Trading History")
         display_empty_trading_history()
-
-    # # Placeholder for chart with trading history
-    # st.subheader("Price Chart with Trading History")
-    # plot_empty_chart()
