@@ -14,13 +14,15 @@ st.sidebar.image("assets/logo.jpg", use_column_width=True)
 
 # Sidebar for Stellar Key
 st.sidebar.title("Stellar Trading Bot")
+
+network_choice = st.sidebar.selectbox("Select Network", ["Testnet", "Mainnet"])
 stellar_key = st.sidebar.text_input("Enter Your Stellar Key", type="password")
 
 # Sidebar for chart type
 chart_type = st.sidebar.selectbox("Select Chart Type", ["Line Chart", "Candlestick Chart"])
 
 # Sidebar for trading pair
-crypto_pair = st.sidebar.selectbox("Select Trading Pair", ["XLM/USD", "BTC/USD"])
+crypto_pair = st.sidebar.selectbox("Select Trading Pair", ["XLM/USDC", "BTC/USD"])
 
 # Function to plot an empty chart with axes
 def plot_empty_chart():
@@ -37,7 +39,6 @@ def display_empty_trading_history():
     empty_df = pd.DataFrame(columns=["Date", "Action", "Amount", "Price"])
     st.table(empty_df)
 
-network_choice = st.sidebar.selectbox("Select Network", ["Testnet", "Mainnet"])
 
 # Initialize TradingBot if key is provided
 if stellar_key:
@@ -80,23 +81,23 @@ if stellar_key:
             else:
                 st.write("No trading history available for this account.")
 
-        # Overlay trading history on chart
-        st.subheader("Price Chart with Trading History")
-        fig, ax = plt.subplots(figsize=(10, 5))
-        ax.plot(price_data['timestamp'], price_data['close'], label='Price')
+        # # Overlay trading history on chart
+        # st.subheader("Price Chart with Trading History")
+        # fig, ax = plt.subplots(figsize=(10, 5))
+        # ax.plot(price_data['timestamp'], price_data['close'], label='Price')
 
-        # Add buy/sell markers
-        for index, trade in trading_history.iterrows():
-            trade_date = datetime.strptime(trade['Date'], "%Y-%m-%dT%H:%M:%SZ")
-            color = 'green' if trade['Action'] == 'Buy' else 'red'
-            ax.axvline(trade_date, color=color, linestyle='--', alpha=0.7)
-            ax.text(trade_date, trade['Price'], f"{trade['Action']} {trade['Amount']}", rotation=90, verticalalignment='bottom', color=color)
+        # # Add buy/sell markers
+        # for index, trade in trading_history.iterrows():
+        #     trade_date = datetime.strptime(trade['Date'], "%Y-%m-%dT%H:%M:%SZ")
+        #     color = 'green' if trade['Action'] == 'Buy' else 'red'
+        #     ax.axvline(trade_date, color=color, linestyle='--', alpha=0.7)
+        #     ax.text(trade_date, trade['Price'], f"{trade['Action']} {trade['Amount']}", rotation=90, verticalalignment='bottom', color=color)
 
-        ax.set_title(f"{crypto_pair} Price with Trading History")
-        ax.set_xlabel("Date")
-        ax.set_ylabel("Price")
-        ax.legend()
-        st.pyplot(fig)
+        # ax.set_title(f"{crypto_pair} Price with Trading History")
+        # ax.set_xlabel("Date")
+        # ax.set_ylabel("Price")
+        # ax.legend()
+        # st.pyplot(fig)
 
     else:
         st.write("No price data available for the selected trading pair.")

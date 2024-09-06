@@ -13,26 +13,47 @@ def fetch_price_data(pair, interval="1h", limit=100):
     """
     server = Server("https://horizon.stellar.org")
 
+    # Split the asset pair (e.g., "XLM/USD")
     base_asset_code, counter_asset_code = pair.split('/')
+
+    # Fetch base and counter assets (with issuer for non-native assets)
     base_asset = Asset.native() if base_asset_code == "XLM" else Asset(base_asset_code, config['asset_issuers'].get(base_asset_code))
     counter_asset = Asset.native() if counter_asset_code == "XLM" else Asset(counter_asset_code, config['asset_issuers'].get(counter_asset_code))
 
-    trades = server.trades().for_asset_pair(base=base_asset, counter=counter_asset).limit(limit).order(desc=True).call()
+    # Error handling for missing issuers
+    if base_asset.code != "XLM" and not config['asset_issuers'].get(base_asset_code):
+        raise ValueError(f"Missing issuer for base asset: {base_asset_code}")
+    if counter_asset.code != "XLM" and not config['asset_issuers'].get(counter_asset_code):
+        raise ValueError(f"Missing issuer for counter asset: {counter_asset_code}")
 
-    trade_data = []
-    for trade in trades['_embedded']['records']:
-        timestamp = datetime.strptime(trade['ledger_close_time'], "%Y-%m-%dT%H:%M:%SZ")
-        price = float(trade['price']['n']) / float(trade['price']['d'])
-        amount = float(trade['base_amount'])
-        trade_data.append({'timestamp': timestamp, 'price': price, 'amount': amount})
+    try:
+        # Fetch trades for the asset pair
+        trades = server.trades().for_asset_pair(base=base_asset, counter=counter_asset).limit(limit).order(desc=True).call()
+        
+        trade_data = []
+        for trade in trades['_embedded']['records']:
+            # Convert ledger close time to datetime
+            timestamp = datetime.strptime(trade['ledger_close_time'], "%Y-%m-%dT%H:%M:%SZ")
+            price = float(trade['price']['n']) / float(trade['price']['d'])
+            amount = float(trade['base_amount'])
+            trade_data.append({'timestamp': timestamp, 'price': price, 'amount': amount})
 
-    df = pd.DataFrame(trade_data)
-    df.set_index('timestamp', inplace=True)
+        # If no trades found, return an empty DataFrame
+        if not trade_data:
+            return pd.DataFrame(columns=['timestamp', 'open', 'high', 'low', 'close'])
 
-    # Resample to OHLC
-    ohlc = df['price'].resample(interval).ohlc()
+        # Create a DataFrame from trade data
+        df = pd.DataFrame(trade_data)
+        df.set_index('timestamp', inplace=True)
 
-    return ohlc.reset_index()
+        # Resample the trade data to OHLC (Open, High, Low, Close) using the specified interval
+        ohlc = df['price'].resample(interval).ohlc()
+
+        return ohlc.reset_index()
+
+    except Exception as e:
+        print(f"Error fetching price data: {e}")
+        return pd.DataFrame()  # Return an empty DataFrame in case of error
 
 def fetch_trading_history(trading_bot):
     """
