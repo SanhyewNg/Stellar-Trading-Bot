@@ -48,29 +48,39 @@ def fetch_price_data(pair, interval="1h", limit=100):
             timestamp = datetime.strptime(trade['ledger_close_time'], "%Y-%m-%dT%H:%M:%SZ")
             price = float(trade['price']['n']) / float(trade['price']['d'])
             amount = float(trade['base_amount'])
-            trade_data.append({'timestamp': timestamp, 'price': price, 'amount': amount})
-            # print(trade)
+            volume = float(trade.get('base_amount', 0))  # Use amount or another field if volume is not provided
+            trade_data.append({'timestamp': timestamp, 'price': price, 'amount': amount, 'volume': volume})
 
         # If no trades found, return an empty DataFrame
         if not trade_data:
             logging.warning("No trades found.")
-            return pd.DataFrame(columns=['timestamp', 'open', 'high', 'low', 'close'])
+            return pd.DataFrame(columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
 
         # Create a DataFrame from trade data
         logging.info(f"Processing {len(trade_data)} trades.")
         df = pd.DataFrame(trade_data)
         df.set_index('timestamp', inplace=True)
 
-        # Resample the trade data to OHLC (Open, High, Low, Close) using the specified interval
-        ohlc = df['price'].resample(interval).ohlc()
-        logging.info(f"OHLC data generated for {pair}.")
-        print(ohlc)
+        # Ensure the DataFrame is sorted by timestamp
+        df.sort_index(inplace=True)
 
+        # Resample the trade data to OHLC (Open, High, Low, Close) and aggregate volume using the specified interval
+        ohlc = df['price'].resample(interval).ohlc()
+        volume = df['volume'].resample(interval).sum()  # Aggregate volume
+        ohlc['volume'] = volume  # Add volume to OHLC DataFrame
+
+        # Ensure continuity by aligning open price of the next candle to close price of the previous candle
+        ohlc['open'] = ohlc['close'].shift(1)
+        ohlc['open'].fillna(method='bfill', inplace=True)  # Forward fill the open price for the first candle
+        ohlc['open'] = ohlc['open'].fillna(ohlc['close'])
+
+        logging.info(f"OHLC data generated for {pair}.")
         return ohlc.reset_index()
 
     except Exception as e:
         logging.error(f"Error fetching price data: {e}")
         return pd.DataFrame()  # Return an empty DataFrame in case of error
+
 
 
 def fetch_trading_history(trading_bot):

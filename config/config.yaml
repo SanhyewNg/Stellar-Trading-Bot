@@ -1,8 +1,5 @@
-stellar_api_key: "GAOHRNEIAIWX42ONJ5R25X3C4R45GGPWPSHODW4ZWNMUJYFXVATF7PWL"
-trading_pair: "XLM/USD"
-initial_balance: 1000
-
 asset_issuers:
+  XLM: null  # XLM is native and doesn't have an issuer
   USDC: "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN"
   BTC: "GBSTRUSD4RJ6XY57NYCUHY3SDDA5MYCYPOUBEKLYMT3MHY7VCOFRHCU7"  # Replace with actual issuer
   # Add other assets and their issuers as needed
