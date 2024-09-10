@@ -1,5 +1,19 @@
 import yaml
 import pandas as pd
+from datetime import datetime, timedelta
+from stellar_sdk import Server, Asset
+import logging
+import pytz
+
+# Set up logging configuration
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+# Load configuration
+with open("config/config.yaml", "r") as file:
+    config = yaml.safe_load(file)
+
+import yaml
+import pandas as pd
 from datetime import datetime
 from stellar_sdk import Server, Asset
 import logging
@@ -11,83 +25,109 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 with open("config/config.yaml", "r") as file:
     config = yaml.safe_load(file)
 
-
-def fetch_price_data(pair, interval="1h", limit=100):
+def fetch_price_data(network_url="https://horizon.stellar.org", 
+                     crypto_pair="XLM/USDC", 
+                     interval="1h", 
+                     num_points=20):
     """
     Fetch historical trade data from Stellar Horizon API and aggregate into OHLC.
+
+    Parameters:
+    - network_url: URL of the Stellar Horizon API
+    - crypto_pair: Trading pair in the format "BASE/QUOTE"
+    - interval: Time interval for resampling (e.g., "1m", "5m", "15m", "1h", "1d", "1w")
+    - num_points: Number of intervals (candlesticks) to display
+
+    Returns:
+    - DataFrame with OHLC data
     """
-    server = Server("https://horizon.stellar.org")
+    server = Server(network_url)
 
-    # Log the asset pair being processed
-    logging.info(f"Fetching trade data for pair: {pair}, interval: {interval}, limit: {limit}")
+    logging.info(f"Fetching trade data for pair: {crypto_pair}, interval: {interval}, num_points: {num_points}")
 
-    # Split the asset pair (e.g., "XLM/USD")
-    base_asset_code, counter_asset_code = pair.split('/')
+    base_asset_code, counter_asset_code = crypto_pair.split('/')
     logging.info(f"Base asset: {base_asset_code}, Counter asset: {counter_asset_code}")
 
-    # Fetch base and counter assets (with issuer for non-native assets)
     base_asset = Asset.native() if base_asset_code == "XLM" else Asset(base_asset_code, config['asset_issuers'].get(base_asset_code))
     counter_asset = Asset.native() if counter_asset_code == "XLM" else Asset(counter_asset_code, config['asset_issuers'].get(counter_asset_code))
 
-    # Error handling for missing issuers
-    if base_asset.code != "XLM" and not config['asset_issuers'].get(base_asset_code):
-        logging.error(f"Missing issuer for base asset: {base_asset_code}")
-        raise ValueError(f"Missing issuer for base asset: {base_asset_code}")
-    if counter_asset.code != "XLM" and not config['asset_issuers'].get(counter_asset_code):
-        logging.error(f"Missing issuer for counter asset: {counter_asset_code}")
-        raise ValueError(f"Missing issuer for counter asset: {counter_asset_code}")
-
     try:
-        # Fetch trades for the asset pair
-        logging.info(f"Fetching trades for {base_asset_code}/{counter_asset_code}")
-        trades = server.trades().for_asset_pair(base=base_asset, counter=counter_asset).limit(limit).order(desc=True).call()
-        
-        trade_data = []
-        for trade in trades['_embedded']['records']:
-            # Convert ledger close time to datetime
-            timestamp = datetime.strptime(trade['ledger_close_time'], "%Y-%m-%dT%H:%M:%SZ")
-            price = float(trade['price']['n']) / float(trade['price']['d'])
-            amount = float(trade['base_amount'])
-            volume = float(trade.get('base_amount', 0))  # Use amount or another field if volume is not provided
-            trade_data.append({'timestamp': timestamp, 'price': price, 'amount': amount, 'volume': volume})
+        interval_duration = pd.to_timedelta(interval)
+        end_time = datetime.utcnow().replace(tzinfo=pytz.utc)
+        start_time = end_time - interval_duration * num_points
 
-        # If no trades found, return an empty DataFrame
-        if not trade_data:
+        logging.info(f"Fetching trades for {base_asset_code}/{counter_asset_code} from {start_time} to {end_time}")
+
+        all_trade_data = []
+        cursor = None
+        stop_fetching = False  # Flag to stop fetching once we go beyond the start time
+        while not stop_fetching:
+            # Fetch a maximum of 200 trades per request (API limit)
+            trades_request = server.trades().for_asset_pair(base=base_asset, counter=counter_asset).order(desc=True).limit(200)
+            if cursor:
+                trades_request = trades_request.cursor(cursor)
+
+            trades = trades_request.call()
+
+            trade_data = []
+            for trade in trades['_embedded']['records']:
+                timestamp = datetime.strptime(trade['ledger_close_time'], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=pytz.utc)
+                
+                if timestamp < start_time:  # Stop if the trade is older than the start time
+                    stop_fetching = True
+                    break  # Break the inner loop, but outer loop will terminate due to flag
+                
+                price = float(trade['price']['n']) / float(trade['price']['d'])
+                amount = float(trade.get('base_amount', 0))
+                volume = float(trade.get('base_amount', 0))
+                trade_data.append({'timestamp': timestamp, 'price': price, 'amount': amount, 'volume': volume})
+
+            all_trade_data.extend(trade_data)
+            
+            if len(trades['_embedded']['records']) < 200:  # Break if fewer than 200 trades returned
+                break
+            
+            cursor = trades['_embedded']['records'][-1]['paging_token']  # Update the cursor for the next request
+
+        if not all_trade_data:
             logging.warning("No trades found.")
             return pd.DataFrame(columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
 
-        # Create a DataFrame from trade data
-        logging.info(f"Processing {len(trade_data)} trades.")
-        df = pd.DataFrame(trade_data)
+        logging.info(f"Processing {len(all_trade_data)} trades.")
+        df = pd.DataFrame(all_trade_data)
         df.set_index('timestamp', inplace=True)
-
-        # Ensure the DataFrame is sorted by timestamp
         df.sort_index(inplace=True)
 
-        # Resample the trade data to OHLC (Open, High, Low, Close) and aggregate volume using the specified interval
         ohlc = df['price'].resample(interval).ohlc()
-        volume = df['volume'].resample(interval).sum()  # Aggregate volume
-        ohlc['volume'] = volume  # Add volume to OHLC DataFrame
+        volume = df['volume'].resample(interval).sum()
+        ohlc['volume'] = volume
 
-        # Ensure continuity by aligning open price of the next candle to close price of the previous candle
         ohlc['open'] = ohlc['close'].shift(1)
-        ohlc['open'].fillna(method='bfill', inplace=True)  # Forward fill the open price for the first candle
+        ohlc['open'] = ohlc['open'].ffill()
         ohlc['open'] = ohlc['open'].fillna(ohlc['close'])
 
-        logging.info(f"OHLC data generated for {pair}.")
+        if len(ohlc) > num_points:
+            ohlc = ohlc.iloc[-num_points:]
+
+        logging.info(f"OHLC data generated for {crypto_pair}.")
         return ohlc.reset_index()
 
     except Exception as e:
         logging.error(f"Error fetching price data: {e}")
-        return pd.DataFrame()  # Return an empty DataFrame in case of error
+        return pd.DataFrame()
 
 
 
-def fetch_trading_history(trading_bot):
+def fetch_account_balance(trading_bot, network_url="https://horizon.stellar.org"):
+    pass
+
+
+
+def fetch_trading_history(trading_bot, network_url="https://horizon.stellar.org"):
     """
     Fetch trading history for the given Stellar key.
     """
-    server = Server("https://horizon.stellar.org")
+    server = Server(network_url)
     account_id = trading_bot.keypair.public_key  # Use the public key from the TradingBot instance
 
     try:
@@ -97,20 +137,21 @@ def fetch_trading_history(trading_bot):
         # Extract relevant data from transactions
         trades = []
         for transaction in transactions['_embedded']['records']:
-            if 'operations' in transaction:
-                for operation in transaction['operations']:
-                    if operation['type'] == 'manage_buy_offer' or operation['type'] == 'manage_sell_offer':
-                        trades.append({
-                            "Date": transaction['created_at'],
-                            "Action": "Buy" if operation['type'] == 'manage_buy_offer' else "Sell",
-                            "Amount": float(operation['amount']),  # Convert to float
-                            "Price": float(operation.get('price', 0))  # Convert to float, default to 0
-                        })
+            # Fetch operations for the current transaction
+            operations = server.operations().for_transaction(transaction['id']).call()['_embedded']['records']
+            for operation in operations:
+                if operation['type'] == 'manage_buy_offer' or operation['type'] == 'manage_sell_offer':
+                    trades.append({
+                        "Date": transaction['created_at'],
+                        "Action": "Buy" if operation['type'] == 'manage_buy_offer' else "Sell",
+                        "Amount": float(operation.get('amount', 0)),  # Convert to float, default to 0
+                        "Price": float(operation.get('price', 0))  # Convert to float, default to 0
+                    })
 
         # Convert list of trades into a DataFrame
         trades_df = pd.DataFrame(trades)
         return trades_df
 
     except Exception as e:
-        print(f"Error fetching trading history: {e}")
+        logging.error(f"Error fetching trading history: {e}")
         return pd.DataFrame(columns=["Date", "Action", "Amount", "Price"])

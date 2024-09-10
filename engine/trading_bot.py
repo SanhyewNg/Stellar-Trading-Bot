@@ -1,7 +1,11 @@
 import yaml
 from stellar_sdk import Server, Keypair, TransactionBuilder, Network, Asset, ManageBuyOffer, ManageSellOffer
 from stellar_sdk.exceptions import BadRequestError, ConnectionError, NotFoundError
+import logging
+import pandas as pd
 
+# Set up logging configuration
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 # Load configuration
 with open("config/config.yaml", "r") as file:
     config = yaml.safe_load(file)
@@ -9,8 +13,8 @@ with open("config/config.yaml", "r") as file:
 class TradingBot:
     def __init__(self, stellar_key, network="testnet"):
         self.keypair = Keypair.from_secret(stellar_key)
+        print(self.keypair)
 
-        # Choose between testnet and mainnet
         if network == "testnet":
             self.server = Server(horizon_url="https://horizon-testnet.stellar.org")
             self.network_passphrase = Network.TESTNET_NETWORK_PASSPHRASE
@@ -18,31 +22,64 @@ class TradingBot:
             self.server = Server(horizon_url="https://horizon.stellar.org")
             self.network_passphrase = Network.PUBLIC_NETWORK_PASSPHRASE
 
-        # Load account from the Stellar network
         try:
             self.account = self.server.load_account(self.keypair.public_key)
         except NotFoundError as e:
             raise ValueError("The Stellar account was not found. Check the Stellar Key or the network.") from e
 
     def get_balance(self, asset_code="XLM", asset_issuer=None):
-        """
-        Get the balance of the specified asset.
-        """
         try:
-            balances = self.account.balances
+            # Fetch account details from the server
+            account = self.server.accounts().account_id(self.keypair.public_key).call()
+            balances = account['balances']
+
+            # Iterate over the balances and find the required asset
             for balance in balances:
                 if balance['asset_type'] == 'native' and asset_code == 'XLM':
                     return float(balance['balance'])
                 elif balance['asset_code'] == asset_code and balance['asset_issuer'] == asset_issuer:
                     return float(balance['balance'])
-        except KeyError:
+        except Exception as e:
+            print(f"Error fetching balance: {e}")
             return 0.0
+
         return 0.0
 
+    def fetch_trades(self):
+        """
+        Fetch trading history for the given Stellar key.
+        """
+        server = self.server
+        account_id = self.keypair.public_key  # Use the public key from the TradingBot instance
+
+        try:
+            # Fetch all transactions for the account
+            transactions = server.transactions().for_account(account_id).limit(200).order(desc=True).call()
+
+            # Extract relevant data from transactions
+            trades = []
+            for transaction in transactions['_embedded']['records']:
+                # Fetch operations for the current transaction
+                operations = server.operations().for_transaction(transaction['id']).call()['_embedded']['records']
+                for operation in operations:
+                    if operation['type'] == 'manage_buy_offer' or operation['type'] == 'manage_sell_offer':
+                        trades.append({
+                            "Date": transaction['created_at'],
+                            "Action": "Buy" if operation['type'] == 'manage_buy_offer' else "Sell",
+                            "Amount": float(operation.get('amount', 0)),  # Convert to float, default to 0
+                            "Price": float(operation.get('price', 0))  # Convert to float, default to 0
+                        })
+
+            # Convert list of trades into a DataFrame
+            trades_df = pd.DataFrame(trades)
+            return trades_df
+
+        except Exception as e:
+            logging.error(f"Error fetching trading history: {e}")
+            return pd.DataFrame(columns=["Date", "Action", "Amount", "Price"])
+    
+
     def place_order(self, base_asset_code, counter_asset_code, amount, price, buy=True, base_fee=10000):
-        """
-        Place a buy or sell order with error handling.
-        """
         try:
             base_issuer = config['asset_issuers'].get(base_asset_code)
             counter_issuer = config['asset_issuers'].get(counter_asset_code)
@@ -50,7 +87,6 @@ class TradingBot:
             base_asset = Asset.native() if base_asset_code == "XLM" else Asset(base_asset_code, base_issuer)
             counter_asset = Asset.native() if counter_asset_code == "XLM" else Asset(counter_asset_code, counter_issuer)
 
-            # Build the transaction
             transaction = (
                 TransactionBuilder(
                     source_account=self.account,
@@ -74,43 +110,12 @@ class TradingBot:
                 .build()
             )
 
-            # Sign the transaction
             transaction.sign(self.keypair)
-
-            # Submit the transaction
             response = self.server.submit_transaction(transaction)
             return response
 
-        except (BadRequestError, ConnectionError) as e:
+        except Exception as e:
             print(f"Error placing order: {e}")
             return None
 
-    def fetch_trades(self, base_asset_code="XLM", counter_asset_code="USD"):
-        """
-        Fetch trades made by the bot with error handling.
-        """
-        try:
-            base_issuer = config['asset_issuers'].get(base_asset_code)
-            counter_issuer = config['asset_issuers'].get(counter_asset_code)
-
-            base_asset = Asset.native() if base_asset_code == "XLM" else Asset(base_asset_code, base_issuer)
-            counter_asset = Asset.native() if counter_asset_code == "XLM" else Asset(counter_asset_code, counter_issuer)
-
-            trades = self.server.trades().for_asset_pair(base_asset, counter_asset).limit(200).order(desc=True).call()
-
-            # Process and return trades
-            trade_list = []
-            for trade in trades['_embedded']['records']:
-                trade_list.append({
-                    "Date": trade['created_at'],
-                    "Base Asset": base_asset_code,
-                    "Counter Asset": counter_asset_code,
-                    "Amount": float(trade['amount']),
-                    "Price": float(trade['price'])
-                })
-
-            return trade_list
-
-        except ConnectionError as e:
-            print(f"Error fetching trades: {e}")
-            return []
+    
