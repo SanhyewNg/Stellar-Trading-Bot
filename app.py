@@ -44,7 +44,6 @@ with col1:
             trades = bot.fetch_trades()
 
         if not trades.empty:
-            st.write("Trade History:")
             # Display trading history with fixed height and vertical scroll
             st.dataframe(trades, height=300)
         else:
@@ -66,7 +65,8 @@ with col2:
 
     col221, col222 = st.columns([3, 1])
     with col221:
-        time_intervals = ["15s", "30s", "1m", "2m", "5m", "15m", "1h", "1d", "1w"]
+        # time_intervals = ["15s", "30s", "1m", "2m", "5m", "15m", "1h", "1d", "1w"]
+        time_intervals = ["1m", "2m", "5m", "15m", "1h", "1d", "1w"]
         selected_interval = st.radio("Interval of Time Points", time_intervals, horizontal=True)
         interval_mapping = {
             "5s": "5s",
