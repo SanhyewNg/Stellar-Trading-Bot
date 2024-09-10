@@ -9,7 +9,8 @@ from stellar_sdk import Server
 # server_url = "https://horizon.stellar.org"  # or mainnet URL
 # assets = list_assets(server_url)
 # for asset in assets:
-#     print(f"Asset Code: {asset['asset_code']}, Issuer: {asset['asset_issuer']}")
+#     # print(f"Asset Code: {asset['asset_code']}, Issuer: {asset['asset_issuer']}")
+#     print(asset)
 
 
 from stellar_sdk import Server
@@ -26,7 +27,8 @@ def get_asset_details_by_code(server_url, asset_code):
         
         if assets_call['_embedded']['records']:
             for asset_detail in assets_call['_embedded']['records']:
-                print(f"Asset Code: {asset_detail['asset_code']}, Issuer: {asset_detail['asset_issuer']}")
+                # print(f"Asset Code: {asset_detail['asset_code']}, Issuer: {asset_detail['asset_issuer']}")
+                print(asset_detail)
             return assets_call['_embedded']['records']  # Return the list of asset details
         else:
             print(f"No assets found with code {asset_code}.")
@@ -39,13 +41,14 @@ def get_asset_details_by_code(server_url, asset_code):
 # Example usage:
 # server_url = "https://horizon-testnet.stellar.org"  # testnet 
 server_url = "https://horizon.stellar.org" # mainnet
+asset_code = "AQUA"  # The asset code you are searching for
 # asset_code = "USDC"  # The asset code you are searching for
-asset_code = "BTC"  # The asset code you are searching for
+# asset_code = "BTC"  # The asset code you are searching for
 
 details = get_asset_details_by_code(server_url, asset_code)
 
-if details:
-    for detail in details:
-        print(f"Found Asset: Code={detail['asset_code']}, Issuer={detail['asset_issuer']}")
-else:
-    print(f"Asset {asset_code} not found.")
+# if details:
+#     for detail in details:
+#         print(f"Found Asset: Code={detail['asset_code']}, Issuer={detail['asset_issuer']}")
+# else:
+#     print(f"Asset {asset_code} not found.")

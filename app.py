@@ -14,7 +14,7 @@ st.set_page_config(page_title="Stellar Trading", layout="wide")
 # Sidebar
 st.sidebar.image("assets/logo.jpg", use_column_width=True)
 st.sidebar.title("Stellar Trading")
-network_choice = st.sidebar.selectbox("Select Network", ["Testnet", "Mainnet"])
+network_choice = st.sidebar.selectbox("Select Network", ["Mainnet", "Testnet"])
 stellar_key = st.sidebar.text_input("Enter Your Stellar Key (Private)", type="password")
 
 # Determine the network URL based on selection
@@ -29,16 +29,10 @@ with col1:
     if stellar_key:
         bot = TradingBot(stellar_key, network=network_choice.lower())
         
-        with st.spinner("Fetching account balance..."):
-            balance_xlm = bot.get_balance(asset_code="XLM")
-            st.write(f"XLM Balance: {balance_xlm}")
-
-            # Assuming you want to show balances for other assets if needed
-            asset_issuers = config.get('asset_issuers', {})
-            for asset_code, issuer in asset_issuers.items():
-                balance = bot.get_balance(asset_code=asset_code, asset_issuer=issuer)
-                st.write(f"{asset_code} Balance: {balance}")
-
+        with st.spinner("Fetching account balances..."):
+            balances = bot.get_balances()
+            # Display account balances with fixed height and vertical scroll
+            st.dataframe(balances, height=300)
     else:
         st.write("Please enter your Stellar Key to proceed.")
 
@@ -49,9 +43,10 @@ with col1:
         with st.spinner("Fetching trading history..."):
             trades = bot.fetch_trades()
 
-        if trades:
+        if not trades.empty:
             st.write("Trade History:")
-            st.table(trades)
+            # Display trading history with fixed height and vertical scroll
+            st.dataframe(trades, height=300)
         else:
             st.write("No trading history available for this account.")
     else:
@@ -69,11 +64,10 @@ with col2:
 
     chart_tab, candlestick_tab = st.tabs(["Line Chart", "Candlestick Chart"])
 
-    col221, col222 = st.columns([2, 1])
+    col221, col222 = st.columns([3, 1])
     with col221:
-        time_intervals = ["1m", "5m", "15m", "1h", "1d", "1w"]
-        time_intervals = ["5s", "15s", "30s", "1m", "2m", "5m"]
-        selected_interval = st.radio("Time Interval", time_intervals, horizontal=True)
+        time_intervals = ["15s", "30s", "1m", "2m", "5m", "15m", "1h", "1d", "1w"]
+        selected_interval = st.radio("Interval of Time Points", time_intervals, horizontal=True)
         interval_mapping = {
             "5s": "5s",
             "15s": "15s",
@@ -89,9 +83,9 @@ with col2:
         interval = interval_mapping[selected_interval]
 
     with col222:
-        num_points = st.slider("Number of Points", min_value=10, max_value=100, value=30, step=10)
+        num_points = st.slider("Number of Time Points", min_value=10, max_value=100, value=30, step=10)
 
-    with st.spinner(f"Fetching {interval} interval {num_points} points price data..."):
+    with st.spinner(f"Fetching {interval} interval {num_points} points data..."):
         price_data = fetch_price_data(network_url=network_url, 
                                       crypto_pair=f"{crypto_1}/{crypto_2}", 
                                       interval=interval, 
