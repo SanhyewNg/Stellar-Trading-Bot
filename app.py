@@ -49,6 +49,10 @@ if "interval" not in st.session_state:
 if "num_points" not in st.session_state:
     st.session_state["num_points"] = 50
 
+if "balances" not in st.session_state:
+    st.session_state["balances"] = None
+
+
 # %%
 # Trading History & Balance
 col1, col2 = st.columns([1, 1])
