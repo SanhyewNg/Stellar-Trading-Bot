@@ -1,11 +1,13 @@
 import yaml
 import requests
 import logging
+import numpy as np
 import pandas as pd
 from stellar_sdk import Server, Keypair, TransactionBuilder, Network, Asset, ManageBuyOffer, ManageSellOffer
 from stellar_sdk.exceptions import BadRequestError, ConnectionError, NotFoundError
 
 import engine.utils as utils
+from engine.strategies import apply_moving_average_strategy
 
 # Set up logging configuration
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -119,7 +121,7 @@ class TradingBot:
                     network_passphrase=self.network_passphrase,
                     base_fee=base_fee
                 )
-                .add_operation(
+                .append_operation(
                     ManageBuyOffer(
                         selling=base_asset,
                         buying=counter_asset,
@@ -144,3 +146,59 @@ class TradingBot:
         except Exception as e:
             logging.error(f"Error placing order: {e}")
             return None
+
+    def do_exchange(self, base_asset_code, counter_asset_code, price_data, balances):
+        try:
+            # Ensure price_data is a DataFrame
+            if not isinstance(price_data, pd.DataFrame):
+                raise ValueError("price_data should be a pandas DataFrame")
+
+            # Apply the moving average strategy
+            price_data = apply_moving_average_strategy(price_data)
+
+            # Get the latest trading signal
+            latest_signal = price_data.iloc[-1]['Signal']
+            latest_price = price_data.iloc[-1]['close']
+
+            # Fetch the available balance for the base asset
+            base_balance = next((item['Balance'] for item in balances if item['Asset'] == base_asset_code), 0)
+            counter_balance = next((item['Balance'] for item in balances if item['Asset'] == counter_asset_code), 0)
+
+            # Define the trade amount and price
+            amount = min(float(base_balance) * 0.1, 100)  # Example: Use 10% of the balance or a maximum of 100
+            if amount <= 0:
+                logging.warning("Insufficient balance to trade.")
+                return
+
+            # Execute the trade based on the signal
+            if latest_signal == 'Buy':
+                # Buy counter_asset using base_asset
+                if base_balance > 0:
+                    response = self.place_order(
+                        base_asset_code=base_asset_code,
+                        counter_asset_code=counter_asset_code,
+                        amount=amount,
+                        price=latest_price,
+                        buy=True
+                    )
+                    if response:
+                        logging.info(f"Buy order placed: {response}")
+            elif latest_signal == 'Sell':
+                # Sell base_asset to get counter_asset
+                if counter_balance > 0:
+                    response = self.place_order(
+                        base_asset_code=base_asset_code,
+                        counter_asset_code=counter_asset_code,
+                        amount=amount,
+                        price=latest_price,
+                        buy=False
+                    )
+                    if response:
+                        logging.info(f"Sell order placed: {response}")
+
+            # Update trading history
+            trades_df = self.fetch_trading_history()
+            logging.info(f"Updated trading history: {trades_df}")
+
+        except Exception as e:
+            logging.error(f"Error in do_exchange: {e}")
