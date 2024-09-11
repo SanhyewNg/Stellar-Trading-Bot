@@ -157,6 +157,12 @@ with col2:
 
     # Plot charts if price data is available
     if not price_data.empty:
+        # Interpolate missing values in the price data
+        price_data['open'] = price_data['open'].interpolate(method='linear')
+        price_data['close'] = price_data['close'].interpolate(method='linear')
+        if 'volume' in price_data.columns:
+            price_data['volume'] = price_data['volume'].interpolate(method='linear')
+
         layout_adjustments = {
             "margin": dict(l=20, r=20, t=20, b=20),
             "xaxis": {"title": "Time", "automargin": True, "rangeslider": {"visible": False}},
@@ -181,13 +187,13 @@ with col2:
 
         with chart_tab:
             fig_line = go.Figure()
-            fig_line.add_trace(go.Scatter(x=price_data['timestamp'], y=(price_data['open']+price_data['close'])/2, mode='lines', name='Price'))
+            # Line chart uses interpolated data for smoother visualization
+            fig_line.add_trace(go.Scatter(x=price_data['timestamp'], y=(price_data['open'] + price_data['close']) / 2, mode='lines', name='Price'))
             if 'volume' in price_data.columns:
                 fig_line.add_trace(go.Bar(x=price_data['timestamp'], y=price_data['volume'], name='Volume', yaxis='y2', opacity=0.5))
             else:
                 st.write("Volume data is not available for this trading pair.")
             fig_line.update_layout(**layout_adjustments)
             st.plotly_chart(fig_line, use_container_width=True)
-
     else:
         st.write("No data available for the selected crypto pair.")
