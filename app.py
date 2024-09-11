@@ -35,6 +35,10 @@ if stellar_key != st.session_state["previous_stellar_key"]:
 bot = None
 if stellar_key:
     bot = TradingBot(stellar_key, network=network_choice.lower())
+if stellar_key and bot:
+    with st.spinner("Fetching account balances..."):
+        balances = bot.get_balances()
+        st.session_state['balances'] = balances
 
 # Save state for charts to trigger updates
 if "crypto_1" not in st.session_state:
@@ -55,40 +59,44 @@ if "balances" not in st.session_state:
 
 # %%
 # Trading History & Balance
-col1, col2 = st.columns([1, 1])
+col1, col2 = st.columns([2, 1])
 
-with col1:
-    st.subheader("Account Balance")
+with col2:
+    st.subheader("Account")
+    st.write("**Balances**")
     if stellar_key and bot:
         with st.spinner("Fetching account balances..."):
             balances = bot.get_balances()
             st.session_state['balances'] = balances
             # Display account balances with fixed height and vertical scroll
-            st.dataframe(pd.DataFrame(balances), height=300)
+            st.dataframe(pd.DataFrame(balances), height=250, use_container_width=True)
     else:
         st.write("Please enter your Stellar Key to proceed.")
 
-    st.subheader("Trading History")
+    st.write("**Trading History**")
     if stellar_key and bot:
+        trades = pd.DataFrame(columns=["Time", "Sell", "Buy", "Amount", "Price", "Total"])
         # Uncomment when trading history functionality is enabled
         # with st.spinner("Fetching trading history..."):
         #     trades = bot.fetch_trading_history()
 
-        # if not trades.empty:
-        #     # Display trading history with fixed height and vertical scroll
-        #     st.dataframe(trades, height=300)
-        # else:
-        #     st.write("No trading history available for this account.")
-        st.write("Trading history will be displayed here.")
+        if not trades.empty:
+            # Display trading history with fixed height and vertical scroll
+            st.dataframe(trades, height=350, use_container_width=True)
+        else:
+            st.write("No trading history available for this account.")
+            st.dataframe(trades, height=350, use_container_width=True)
     else:
         st.write("Please enter your Stellar Key to proceed.")
 
 # %%
 # Crypto Charts
-with col2:
-    col21, col22 = st.columns([1, 1])
+with col1:
+    st.subheader("Exchange")
+
+    col11, col12 = st.columns([1, 1])
     
-    with col21:
+    with col11:
         available_cryptos = list(config["asset_issuers"].keys())
         
         # Prevent resetting the second crypto selection unnecessarily
@@ -108,7 +116,7 @@ with col2:
                     balance_1 = balance['Balance']
             st.write(f"Available:  {balance_1} {st.session_state['crypto_1']}")
     
-    with col22:
+    with col12:
         # Only update second crypto options when the first crypto changes
         available_cryptos_for_second = [crypto for crypto in available_cryptos if crypto != st.session_state["crypto_1"]]
         st.session_state["crypto_2"] = st.selectbox("Second Crypto", available_cryptos_for_second, index=0)
@@ -124,9 +132,9 @@ with col2:
     # Only update the chart when crypto selection, interval, or number of time points change
     candlestick_tab, chart_tab = st.tabs(["Candlestick Chart", "Line Chart"])
     
-    col221, col222 = st.columns([3, 1])
+    _, col13, col14, _ = st.columns([1, 6, 2, 1])
     
-    with col221:
+    with col13:
         time_intervals = ["1m", "2m", "5m", "15m", "1h", "1d", "1w"]
         selected_interval = st.radio("Interval of Time Points", time_intervals, horizontal=True)
         interval_mapping = {
@@ -143,7 +151,7 @@ with col2:
         }
         st.session_state["interval"] = interval_mapping[selected_interval]
     
-    with col222:
+    with col14:
         st.session_state["num_points"] = st.slider("Number of Time Points", min_value=10, max_value=100, value=50, step=10)
 
     # Fetch price data based on selected crypto pair, interval, and number of points

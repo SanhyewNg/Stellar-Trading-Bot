@@ -44,24 +44,24 @@ class TradingBot:
             balance_data = []
             asset_issuers = self.config.get('asset_issuers', {})
 
-            # for asset_code, asset_issuer in asset_issuers.items():
-            for balance in balances:
-                # print(balance)
-                current_asset_code = "XLM" if balance['asset_type'] == 'native' else balance.get('asset_code', 'Unknown')
-                current_asset_issuer = balance.get('asset_issuer', 'Stellar Foundation')
+            for asset_code, asset_issuer in asset_issuers.items():
+                for balance in balances:
+                    # print(balance)
+                    current_asset_code = "XLM" if balance['asset_type'] == 'native' else balance.get('asset_code', 'Unknown')
+                    current_asset_issuer = balance.get('asset_issuer', 'Stellar Foundation')
 
-                # if current_asset_code == asset_code and current_asset_issuer == asset_issuer:
-                # price, change_24h = utils.get_asset_price_and_change(current_asset_code.lower())
-                # value_usd = float(balance['balance']) * price
+                    if current_asset_code == asset_code and current_asset_issuer == asset_issuer:
+                        # price, change_24h = utils.get_asset_price_and_change(current_asset_code.lower())
+                        # value_usd = float(balance['balance']) * price
 
-                balance_data.append({
-                    'Asset': current_asset_code,
-                    # 'Issuer': current_asset_issuer[:8]+".."+current_asset_issuer[-8:] if len(current_asset_issuer)>16 else current_asset_issuer,
-                    'Issuer': current_asset_issuer,
-                    'Balance': float(balance['balance']),
-                    # 'Value (USD)': value_usd,
-                    # 'Change (24h)': change_24h
-                })
+                        balance_data.append({
+                            'Asset': current_asset_code,
+                            # 'Issuer': current_asset_issuer[:8]+".."+current_asset_issuer[-8:] if len(current_asset_issuer)>16 else current_asset_issuer,
+                            # 'Issuer': current_asset_issuer,
+                            'Balance': float(balance['balance']),
+                            # 'Value (USD)': value_usd,
+                            # 'Change (24h)': change_24h
+                        })
 
             logging.info(f"Fetched balances: {pd.DataFrame(balance_data)}")
             return balance_data
