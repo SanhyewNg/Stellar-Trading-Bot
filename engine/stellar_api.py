@@ -12,22 +12,10 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 with open("config/config.yaml", "r") as file:
     config = yaml.safe_load(file)
 
-import yaml
-import pandas as pd
-from datetime import datetime
-from stellar_sdk import Server, Asset
-import logging
 
-# Set up logging configuration
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-
-# Load configuration
-with open("config/config.yaml", "r") as file:
-    config = yaml.safe_load(file)
-
-def fetch_price_data(network_url="https://horizon.stellar.org", 
+def fetch_exchange_data(network_url="https://horizon.stellar.org", 
                      crypto_pair="XLM/USDC", 
-                     interval="1h", 
+                     interval="1min", 
                      num_points=20):
     """
     Fetch historical trade data from Stellar Horizon API and aggregate into OHLC.
@@ -49,6 +37,7 @@ def fetch_price_data(network_url="https://horizon.stellar.org",
     logging.info(f"Base asset: {base_asset_code}, Counter asset: {counter_asset_code}")
 
     base_asset = Asset.native() if base_asset_code == "XLM" else Asset(base_asset_code, config['asset_issuers'].get(base_asset_code))
+    print(counter_asset_code)
     counter_asset = Asset.native() if counter_asset_code == "XLM" else Asset(counter_asset_code, config['asset_issuers'].get(counter_asset_code))
 
     try:
@@ -115,43 +104,3 @@ def fetch_price_data(network_url="https://horizon.stellar.org",
     except Exception as e:
         logging.error(f"Error fetching price data: {e}")
         return pd.DataFrame()
-
-
-
-def fetch_account_balance(trading_bot, network_url="https://horizon.stellar.org"):
-    pass
-
-
-
-def fetch_trading_history(trading_bot, network_url="https://horizon.stellar.org"):
-    """
-    Fetch trading history for the given Stellar key.
-    """
-    server = Server(network_url)
-    account_id = trading_bot.keypair.public_key  # Use the public key from the TradingBot instance
-
-    try:
-        # Fetch all transactions for the account
-        transactions = server.transactions().for_account(account_id).limit(200).order(desc=True).call()
-
-        # Extract relevant data from transactions
-        trades = []
-        for transaction in transactions['_embedded']['records']:
-            # Fetch operations for the current transaction
-            operations = server.operations().for_transaction(transaction['id']).call()['_embedded']['records']
-            for operation in operations:
-                if operation['type'] == 'manage_buy_offer' or operation['type'] == 'manage_sell_offer':
-                    trades.append({
-                        "Date": transaction['created_at'],
-                        "Action": "Buy" if operation['type'] == 'manage_buy_offer' else "Sell",
-                        "Amount": float(operation.get('amount', 0)),  # Convert to float, default to 0
-                        "Price": float(operation.get('price', 0))  # Convert to float, default to 0
-                    })
-
-        # Convert list of trades into a DataFrame
-        trades_df = pd.DataFrame(trades)
-        return trades_df
-
-    except Exception as e:
-        logging.error(f"Error fetching trading history: {e}")
-        return pd.DataFrame(columns=["Date", "Action", "Amount", "Price"])

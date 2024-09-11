@@ -5,6 +5,8 @@ import pandas as pd
 from stellar_sdk import Server, Keypair, TransactionBuilder, Network, Asset, ManageBuyOffer, ManageSellOffer
 from stellar_sdk.exceptions import BadRequestError, ConnectionError, NotFoundError
 
+import engine.utils as utils
+
 # Set up logging configuration
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
@@ -33,93 +35,7 @@ class TradingBot:
         except NotFoundError as e:
             logging.error("The Stellar account was not found. Check the Stellar Key or the network.")
             raise e
-
-    def get_asset_price_and_change(self, asset_code):
-        asset_id_mapping = {
-            "xlm": "stellar",
-            "usdc": "usd-coin",
-            "btc": "bitcoin",
-            "eth": "ethereum",
-            "bnb": "binancecoin",
-            "xrp": "ripple",
-            "doge": "dogecoin",
-            "ada": "cardano",
-            "sol": "solana",
-            "dot": "polkadot",
-            "uni": "uniswap",
-            "link": "chainlink",
-            "ltc": "litecoin",
-            "mkr": "maker",
-            "bch": "bitcoin-cash",
-            "trx": "tron",
-            "matic": "polygon",
-            "eos": "eos",
-            "ltc": "litecoin",
-            "shib": "shiba-inu",
-            "avax": "avalanche",
-            "xmr": "monero",
-            "algo": "algorand",
-            "chz": "chiliz",
-            "xtz": "tezos",
-            "xlm": "stellar",
-            "usdt": "tether",
-            "celo": "celo",
-            "luna": "terra-luna",
-            "icp": "internet-computer",
-            "doge": "dogecoin",
-            "neo": "neo",
-            "qtum": "qtum",
-            "hbar": "hedera",
-            "ren": "ren",
-            "1inch": "1inch",
-            "sushi": "sushiswap",
-            "yfi": "yearn-finance",
-            "zrx": "0x",
-            "nmr": "numeraire",
-            "dcr": "decred",
-            "bnt": "bancor",
-            "iost": "iost",
-            "xsushi": "xsushi",
-            "crv": "curve-dao-token",
-            "sxp": "swipe",
-            "cvc": "civic",
-            "stk": "stk",
-            "chz": "chiliz",
-            "aave": "aave",
-            "doge": "dogecoin",
-            "fil": "filecoin",
-            "bat": "basic-attention-token",
-            "sand": "the-sandbox",
-            "enj": "enjincoin",
-            "hbar": "hedera",
-            "elrond": "elrond-erd-2",
-            "rune": "thorchain",
-            "yfi": "yearn-finance",
-            "ftm": "fantom",
-            "lrc": "loopring",
-            "ltc": "litecoin",
-            "zil": "zilliqa"
-        }
-
-
-        try:
-            asset_id_mapped = asset_id_mapping.get(asset_code.lower(), asset_code.lower())
-            
-            if not asset_id_mapped:
-                raise ValueError(f"Asset code {asset_code} is not supported")
-            
-            url = f"https://api.coingecko.com/api/v3/simple/price?ids={asset_id_mapped}&vs_currencies=usd&include_24hr_change=true"
-            response = requests.get(url).json()
-            
-            price = response[asset_id_mapped]['usd']
-            change_24h = response[asset_id_mapped]['usd_24h_change']
-            
-            logging.info(f"Fetched price for {asset_code}: {price} USD, 24h change: {change_24h}%")
-            return price, change_24h
-        except Exception as e:
-            logging.error(f"Error fetching price for {asset_code}: {e}")
-            return 0.0, 0.0
-
+    
     def get_balances(self):
         try:
             account = self.server.accounts().account_id(self.keypair.public_key).call()
@@ -135,26 +51,26 @@ class TradingBot:
                 current_asset_issuer = balance.get('asset_issuer', 'Stellar Foundation')
 
                 # if current_asset_code == asset_code and current_asset_issuer == asset_issuer:
-                price, change_24h = self.get_asset_price_and_change(current_asset_code.lower())
-                value_usd = float(balance['balance']) * price
+                # price, change_24h = utils.get_asset_price_and_change(current_asset_code.lower())
+                # value_usd = float(balance['balance']) * price
 
                 balance_data.append({
                     'Asset': current_asset_code,
-                    # 'Issuer': current_asset_issuer,
+                    # 'Issuer': current_asset_issuer[:8]+".."+current_asset_issuer[-8:] if len(current_asset_issuer)>16 else current_asset_issuer,
+                    'Issuer': current_asset_issuer,
                     'Balance': float(balance['balance']),
-                    'Value (USD)': value_usd,
-                    'Change (24h)': change_24h
+                    # 'Value (USD)': value_usd,
+                    # 'Change (24h)': change_24h
                 })
 
-            balances_df = pd.DataFrame(balance_data)
-            logging.info(f"Fetched balances: {balances_df}")
-            return balances_df
+            logging.info(f"Fetched balances: {pd.DataFrame(balance_data)}")
+            return balance_data
 
         except Exception as e:
             logging.error(f"Error fetching balances: {e}")
             return pd.DataFrame()
 
-    def fetch_trades(self):
+    def fetch_trading_history(self):
         try:
             transactions = self.server.transactions().for_account(self.keypair.public_key).limit(200).order(desc=True).call()
             trades = []
