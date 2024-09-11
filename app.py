@@ -181,7 +181,7 @@ with col2:
 
         with chart_tab:
             fig_line = go.Figure()
-            fig_line.add_trace(go.Scatter(x=price_data['timestamp'], y=(price_data['open']+price_data['close']+price_data['high']+price_data['low'])/4, mode='lines', name='Price'))
+            fig_line.add_trace(go.Scatter(x=price_data['timestamp'], y=(price_data['open']+price_data['close'])/2, mode='lines', name='Price'))
             if 'volume' in price_data.columns:
                 fig_line.add_trace(go.Bar(x=price_data['timestamp'], y=price_data['volume'], name='Volume', yaxis='y2', opacity=0.5))
             else:
