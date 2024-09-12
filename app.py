@@ -71,7 +71,12 @@ with col2:
     st.write("**Trading History**")
     if stellar_key and bot:
         trades = pd.DataFrame(columns=["Time", "Sell", "Buy", "Amount", "Price", "Total"])
+        # Uncomment when trading history functionality is enabled
+        with st.spinner("Fetching trading history..."):
+            trades = bot.fetch_trading_history()
+
         if not trades.empty:
+            # Display trading history with fixed height and vertical scroll
             st.dataframe(trades, height=350, use_container_width=True)
         else:
             st.write("No trading history available for this account.")
