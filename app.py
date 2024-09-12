@@ -6,6 +6,7 @@ import pandas as pd
 from engine.stellar_api import fetch_exchange_data
 from engine.trading_bot import TradingBot
 import plotly.graph_objects as go
+from engine.strategies import strategy_names, TradingStrategy
 
 # Load configuration from YAML file
 with open("config/config.yaml", "r") as config_file:
@@ -18,7 +19,8 @@ for key, default in [("crypto_1", list(config["asset_issuers"].keys())[0]),
                      ("num_points", 50), 
                      ("balances", None),
                      ("algo_active", False),
-                     ("previous_stellar_key", "")]:  # algo_active to track if algo trading is on
+                     ("previous_stellar_key", ""),
+                     ("strategy_name", strategy_names[0])]:
     if key not in st.session_state:
         st.session_state[key] = default
 
@@ -46,6 +48,9 @@ if stellar_key != st.session_state["previous_stellar_key"]:
     st.session_state["previous_stellar_key"] = stellar_key
     st.session_state["balances"] = None  # Reset balances when the key changes
 
+
+trading_strategy = TradingStrategy(st.session_state["strategy_name"])
+
 # Initialize the TradingBot instance
 bot = TradingBot(stellar_key, network=network_choice.lower()) if stellar_key else None
 if stellar_key and bot:
@@ -64,7 +69,7 @@ with col2:
         with st.spinner("Fetching account balances..."):
             balances = bot.get_balances()
             st.session_state['balances'] = balances
-            st.dataframe(pd.DataFrame(balances), height=175, use_container_width=True)
+            st.dataframe(pd.DataFrame(balances), height=210, use_container_width=True)
     else:
         st.write("Please enter your Stellar Key to proceed.")
 
@@ -77,10 +82,10 @@ with col2:
 
         if not trades.empty:
             # Display trading history with fixed height and vertical scroll
-            st.dataframe(trades, height=350, use_container_width=True)
+            st.dataframe(trades, height=420, use_container_width=True)
         else:
             st.write("No trading history available for this account.")
-            st.dataframe(trades, height=350, use_container_width=True)
+            st.dataframe(trades, height=420, use_container_width=True)
     else:
         st.write("Please enter your Stellar Key to proceed.")
 
@@ -139,54 +144,116 @@ with col1:
         st.session_state["num_points"] = st.slider("Number of Time Points", min_value=30, max_value=100, value=50, step=10)
 
     with st.spinner(f"Fetching {st.session_state['num_points']} * {st.session_state['interval']} data..."):
-        price_data = fetch_exchange_data(
+        price_df = fetch_exchange_data(
             network_url=network_url,
             crypto_pair=f"{st.session_state['crypto_1']}/{st.session_state['crypto_2']}",
             interval=st.session_state["interval"],
             num_points=st.session_state["num_points"]
         )
 
-    if not price_data.empty:
-        price_data['open'] = price_data['open'].interpolate(method='linear')
-        price_data['close'] = price_data['close'].interpolate(method='linear')
+    if st.session_state["strategy_name"]:
+        # Apply the selected strategy
+        trading_strategy.strategy_name = st.session_state["strategy_name"]
+        price_df = trading_strategy.apply(price_df)
+
+    if not price_df.empty:
+        price_df['open'] = price_df['open'].interpolate(method='linear')
+        price_df['close'] = price_df['close'].interpolate(method='linear')
 
         with candlestick_tab:
             fig_candle = go.Figure(data=[go.Candlestick(
-                x=price_data['timestamp'],
-                open=price_data['open'],
-                high=price_data['high'],
-                low=price_data['low'],
-                close=price_data['close']
+                x=price_df['timestamp'],
+                open=price_df['open'],
+                high=price_df['high'],
+                low=price_df['low'],
+                close=price_df['close']
             )])
-            if 'volume' in price_data.columns:
-                fig_candle.add_trace(go.Bar(x=price_data['timestamp'], y=price_data['volume'], name='Volume', yaxis='y2', opacity=0.3))
+            
+            # Add Buy and Sell markers
+            buy_signals = price_df[price_df['Signal'] == 'Buy']
+            sell_signals = price_df[price_df['Signal'] == 'Sell']
+            
+            fig_candle.add_trace(go.Scatter(
+                x=buy_signals['timestamp'],
+                y=buy_signals['low'],  # Place the marker at the lowest price of the candle
+                mode='markers',
+                name='Buy Signal',
+                marker=dict(symbol='triangle-up', color='blue', size=10)
+            ))
+
+            fig_candle.add_trace(go.Scatter(
+                x=sell_signals['timestamp'],
+                y=sell_signals['high'],  # Place the marker at the highest price of the candle
+                mode='markers',
+                name='Sell Signal',
+                marker=dict(symbol='triangle-down', color='red', size=10)
+            ))
+
+            if 'volume' in price_df.columns:
+                fig_candle.add_trace(go.Bar(x=price_df['timestamp'], y=price_df['volume'], name='Volume', yaxis='y2', opacity=0.3))
+            
             fig_candle.update_layout(**chart_layout_adjustments)
             st.plotly_chart(fig_candle, use_container_width=True)
 
+
         with chart_tab:
             fig_line = go.Figure()
-            fig_line.add_trace(go.Scatter(x=price_data['timestamp'], y=(price_data['open'] + price_data['close']) / 2, mode='lines', name='Price'))
-            if 'volume' in price_data.columns:
-                fig_line.add_trace(go.Bar(x=price_data['timestamp'], y=price_data['volume'], name='Volume', yaxis='y2', opacity=0.5))
-            else:
-                st.write("Volume data is not available for this trading pair.")
+            
+            # Line chart showing price
+            fig_line.add_trace(go.Scatter(
+                x=price_df['timestamp'], 
+                y=(price_df['open'] + price_df['close']) / 2, 
+                mode='lines', 
+                name='Price'
+            ))
+            
+            # Add Buy and Sell markers
+            fig_line.add_trace(go.Scatter(
+                x=buy_signals['timestamp'],
+                y=buy_signals['close'],  # Place the marker on the closing price
+                mode='markers',
+                name='Buy Signal',
+                marker=dict(symbol='triangle-up', color='blue', size=10)
+            ))
+
+            fig_line.add_trace(go.Scatter(
+                x=sell_signals['timestamp'],
+                y=sell_signals['close'],  # Place the marker on the closing price
+                mode='markers',
+                name='Sell Signal',
+                marker=dict(symbol='triangle-down', color='red', size=10)
+            ))
+
+            if 'volume' in price_df.columns:
+                fig_line.add_trace(go.Bar(x=price_df['timestamp'], y=price_df['volume'], name='Volume', yaxis='y2', opacity=0.3))
+            
             fig_line.update_layout(**chart_layout_adjustments)
             st.plotly_chart(fig_line, use_container_width=True)
+
     else:
         st.write("No data available for the selected crypto pair.")
 
-# Toggleable trading control
-if stellar_key:
-    if st.session_state["algo_active"]:
-        if st.button("Stop Algo Trading"):
-            st.session_state["algo_active"] = False
-            st.success("Algorithmic trading stopped.")
-            st.rerun()
-    else:
-        if st.button("Start Algo Trading"):
-            st.session_state["algo_active"] = True
-            st.success("Algorithmic trading started.")
-            st.rerun()
+    
+    _, col15, _, col16, _ = st.columns([1, 3, 1, 3, 1])
+
+    with col15:
+        st.subheader("Trading Strategy")
+        st.session_state["strategy_name"] = st.selectbox("Select Strategy", strategy_names, index=0, label_visibility="hidden")
+
+    with col16:
+        # Toggleable trading control
+        if stellar_key:
+            if st.session_state["algo_active"]:
+                if st.button("Stop Action"):
+                    st.session_state["algo_active"] = False
+                    st.success("Algorithmic trading stopped.")
+                    st.rerun()
+            else:
+                if st.button("Start Action"):
+                    st.session_state["algo_active"] = True
+                    st.success("Algorithmic trading started.")
+                    st.rerun()
+
 
 # Periodic trading logic
 if stellar_key and st.session_state["algo_active"]:
@@ -204,7 +271,7 @@ if stellar_key and st.session_state["algo_active"]:
 
         while st.session_state["algo_active"]:
             try:
-                price_data = fetch_exchange_data(
+                price_df = fetch_exchange_data(
                     network_url=network_url,
                     crypto_pair=f"{st.session_state['crypto_1']}/{st.session_state['crypto_2']}",
                     interval=st.session_state["interval"],
@@ -214,8 +281,9 @@ if stellar_key and st.session_state["algo_active"]:
                 bot.do_exchange(
                     base_asset_code=st.session_state['crypto_1'],
                     counter_asset_code=st.session_state['crypto_2'],
-                    price_data=price_data,
-                    balances=balances
+                    price_df=price_df,
+                    balances=balances,
+                    trading_strategy=trading_strategy
                 )
             except Exception as e:
                 st.error(f"An error occurred: {e}")

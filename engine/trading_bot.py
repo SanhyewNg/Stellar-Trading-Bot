@@ -8,6 +8,7 @@ from stellar_sdk.exceptions import BadRequestError, ConnectionError, NotFoundErr
 
 import engine.utils as utils
 from engine.strategies import apply_moving_average_strategy
+from engine.strategies import strategy_names, TradingStrategy
 
 # Set up logging configuration
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -147,18 +148,18 @@ class TradingBot:
             logging.error(f"Error placing order: {e}")
             return None
 
-    def do_exchange(self, base_asset_code, counter_asset_code, price_data, balances):
+    def do_exchange(self, base_asset_code, counter_asset_code, price_df, balances, trading_strategy):
         try:
-            # Ensure price_data is a DataFrame
-            if not isinstance(price_data, pd.DataFrame):
-                raise ValueError("price_data should be a pandas DataFrame")
+            # Ensure price_df is a DataFrame
+            if not isinstance(price_df, pd.DataFrame):
+                raise ValueError("price_df should be a pandas DataFrame")
 
             # Apply the moving average strategy
-            price_data = apply_moving_average_strategy(price_data)
+            price_df = trading_strategy.apply(price_df)
 
             # Get the latest trading signal
-            latest_signal = price_data.iloc[-1]['Signal']
-            latest_price = price_data.iloc[-1]['close']
+            latest_signal = price_df.iloc[-1]['Signal']
+            latest_price = price_df.iloc[-1]['close']
 
             # Fetch the available balance for the base asset
             base_balance = next((item['Balance'] for item in balances if item['Asset'] == base_asset_code), 0)
