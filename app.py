@@ -81,10 +81,10 @@ with col2:
 
         if not trades.empty:
             # Display trading history with fixed height and vertical scroll
-            st.dataframe(trades, height=420, use_container_width=True)
+            st.dataframe(trades, height=350, use_container_width=True)
         else:
             st.write("No trading history available for this account.")
-            st.dataframe(trades, height=420, use_container_width=True)
+            st.dataframe(trades, height=350, use_container_width=True)
     else:
         st.write("Please enter your Stellar Key to proceed.")
 
@@ -185,7 +185,7 @@ with col1:
                 y=sell_signals['high'],  # Place the marker at the highest price of the candle
                 mode='markers',
                 name='Sell Signal',
-                marker=dict(symbol='triangle-down', color='red', size=10)
+                marker=dict(symbol='triangle-down', color='magenta', size=10)
             ))
 
             if 'volume' in price_df.columns:
@@ -212,7 +212,7 @@ with col1:
                 y=buy_signals['close'],  # Place the marker on the closing price
                 mode='markers',
                 name='Buy Signal',
-                marker=dict(symbol='triangle-up', color='blue', size=10)
+                marker=dict(symbol='triangle-up', color='magenta', size=10)
             ))
 
             fig_line.add_trace(go.Scatter(
@@ -233,21 +233,21 @@ with col1:
         st.write("No data available for the selected crypto pair.")
 
     
-    st.subheader("Trading Strategy")
-    _, col15, _, col16, _ = st.columns([1, 3, 1, 3, 1])
+    # st.subheader("Trading Strategy")
+    col15, _, col16 = st.columns([3, 1, 3], vertical_alignment="bottom")
     with col15:
-        st.session_state["strategy_name"] = st.selectbox("Select Strategy", strategy_names, index=0, label_visibility="hidden")
+        st.session_state["strategy_name"] = st.selectbox("Trading Strategy", strategy_names, index=0)
 
     with col16:
         # Toggleable trading control
         if stellar_key:
             if st.session_state["algo_active"]:
-                if st.button("Stop Action"):
+                if st.button("Stop Bot Action", use_container_width=True):
                     st.session_state["algo_active"] = False
                     st.success("Algorithmic trading stopped.")
                     st.rerun()
             else:
-                if st.button("Start Action"):
+                if st.button("Start Bot Action", use_container_width=True):
                     st.session_state["algo_active"] = True
                     st.success("Algorithmic trading started.")
                     st.rerun()
