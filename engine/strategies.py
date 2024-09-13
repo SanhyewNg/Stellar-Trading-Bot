@@ -86,19 +86,3 @@ class TradingStrategy:
 
         return price_df
 
-
-
-def apply_moving_average_strategy(price_df):
-    """
-    Apply a moving average strategy to decide when to buy or sell.
-    """
-    # Ensure the DataFrame contains the necessary columns
-    required_columns = ['timestamp', 'open', 'high', 'low', 'close']
-    if not all(col in price_df.columns for col in required_columns):
-        raise ValueError(f"DataFrame must contain columns: {required_columns}")
-
-    # Example strategy: Buy if the current price is lower than the moving average, sell if higher
-    price_df['SMA'] = price_df['close'].rolling(window=20).mean()  # 20-period Simple Moving Average
-    price_df['Signal'] = np.where(price_df['close'] > price_df['SMA'], 'Sell', 'Buy')
-    
-    return price_df

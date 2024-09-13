@@ -1,11 +1,10 @@
-import threading
 import time
-import streamlit as st
 import yaml
 import pandas as pd
-from engine.stellar_api import fetch_exchange_data
-from engine.trading_bot import TradingBot
+import streamlit as st
 import plotly.graph_objects as go
+from engine.trading_bot import TradingBot
+from engine.stellar_api import fetch_exchange_data
 from engine.strategies import strategy_names, TradingStrategy
 
 # Load configuration from YAML file
@@ -234,10 +233,9 @@ with col1:
         st.write("No data available for the selected crypto pair.")
 
     
+    st.subheader("Trading Strategy")
     _, col15, _, col16, _ = st.columns([1, 3, 1, 3, 1])
-
     with col15:
-        st.subheader("Trading Strategy")
         st.session_state["strategy_name"] = st.selectbox("Select Strategy", strategy_names, index=0, label_visibility="hidden")
 
     with col16:

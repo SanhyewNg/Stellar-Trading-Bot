@@ -6,10 +6,6 @@ import pandas as pd
 from stellar_sdk import Server, Keypair, TransactionBuilder, Network, Asset, ManageBuyOffer, ManageSellOffer
 from stellar_sdk.exceptions import BadRequestError, ConnectionError, NotFoundError
 
-import engine.utils as utils
-from engine.strategies import apply_moving_average_strategy
-from engine.strategies import strategy_names, TradingStrategy
-
 # Set up logging configuration
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
